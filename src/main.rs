@@ -37,13 +37,14 @@ fn main() -> io::Result<()> {
 	let mut deletable_chars = 0;
 
 	for byte in stdin.bytes() {
-		match byte? as char {
+		let b = byte? as char;
+		match b {
 			'\x03' | '\x04' => break,
-			' ' => {
-				buffer.push(' ');
+			' ' | '.' | '!' | '?' | ':' | ',' | ';' => {
+				buffer.push(b);
 				f.write(buffer.as_bytes())?;
 				buffer.clear();
-				print!(" ");
+				print!("{}", b);
 				deletable_chars = 0;
 			}
 			'\x7f' => {
@@ -53,7 +54,7 @@ fn main() -> io::Result<()> {
 					deletable_chars -= 1;
 				}
 			}
-			b => {
+			_ => {
 				buffer.push(b);
 				print!("{}", b);
 				deletable_chars += 1;
