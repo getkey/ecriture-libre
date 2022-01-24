@@ -79,10 +79,5 @@ fn main() -> io::Result<()> {
 
 	termios::tcsetattr(raw_stdin_fd, termios::SetArg::TCSADRAIN, &old_termios)?;
 
-	if let Err(err) = res {
-		eprintln!("{}", err);
-		return Err(err);
-	}
-
-	Ok(())
+	res
 }
