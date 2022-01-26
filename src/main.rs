@@ -1,9 +1,11 @@
 use clap::Parser;
 use nix::sys::termios;
+use std::fs;
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
+use std::path;
 
 mod stream_string;
 
@@ -12,13 +14,28 @@ struct Args {
 	file: String,
 }
 
-fn process(filename: &str) -> io::Result<()> {
+fn get_file_handle(filename: &str) -> io::Result<fs::File> {
+	let path = path::Path::new(filename);
+	let file_exists = path.exists();
+
 	let mut f = OpenOptions::new()
 		.write(true)
 		.create(true)
 		.append(true)
 		.open(filename)?;
 
+	if !file_exists {
+		if let Some(title) = path.file_name() {
+			if let Some(title) = title.to_str() {
+				f.write_all(format!("# {}\n\n", title).as_bytes())?;
+			}
+		}
+	}
+
+	Ok(f)
+}
+
+fn handle_input(f: &mut fs::File) -> io::Result<()> {
 	let mut word = stream_string::StreamString::new();
 
 	for byte in io::stdin().bytes() {
@@ -48,8 +65,14 @@ fn process(filename: &str) -> io::Result<()> {
 	Ok(())
 }
 
-fn main() -> io::Result<()> {
+fn process() -> io::Result<()> {
 	let args = Args::parse();
+	let mut f = get_file_handle(&args.file)?;
+
+	handle_input(&mut f)
+}
+
+fn main() -> io::Result<()> {
 	let raw_stdin_fd = io::stdin().as_raw_fd();
 
 	let old_termios = termios::tcgetattr(raw_stdin_fd)?;
@@ -64,7 +87,10 @@ fn main() -> io::Result<()> {
 		&non_canonical_termios,
 	)?;
 
-	let res = process(&args.file);
+	// `main` should only go to canonical mode and back
+	// to avoid crashes that mess up with the terminal.
+	// All the actual computation happens in `process`.
+	let res = process();
 
 	termios::tcsetattr(raw_stdin_fd, termios::SetArg::TCSADRAIN, &old_termios)?;
 
