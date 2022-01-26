@@ -1,7 +1,7 @@
+use chrono;
 use clap::Parser;
 use nix::sys::termios;
 use std::fs;
-use std::fs::OpenOptions;
 use std::io;
 use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
@@ -10,26 +10,37 @@ use std::path;
 mod stream_string;
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about)]
 struct Args {
 	file: String,
+
+	/// Add journal formatting in Markdown
+	#[clap(short, long)]
+	journal: bool,
 }
 
-fn get_file_handle(filename: &str) -> io::Result<fs::File> {
+fn get_file_handle(filename: &str, journal: bool) -> io::Result<fs::File> {
 	let path = path::Path::new(filename);
 	let file_exists = path.exists();
 
-	let mut f = OpenOptions::new()
+	let mut f = fs::OpenOptions::new()
 		.write(true)
 		.create(true)
 		.append(true)
 		.open(filename)?;
 
-	if !file_exists {
-		if let Some(title) = path.file_name() {
-			if let Some(title) = title.to_str() {
-				f.write_all(format!("# {}\n\n", title).as_bytes())?;
+	if journal {
+		if !file_exists {
+			if let Some(title) = path.file_name() {
+				if let Some(title) = title.to_str() {
+					f.write_all(format!("# {}", title).as_bytes())?;
+				}
 			}
 		}
+
+		let now = chrono::Local::now();
+
+		f.write_all(now.format("\n\n## %F %R\n\n").to_string().as_bytes())?;
 	}
 
 	Ok(f)
@@ -67,7 +78,7 @@ fn handle_input(f: &mut fs::File) -> io::Result<()> {
 
 fn process() -> io::Result<()> {
 	let args = Args::parse();
-	let mut f = get_file_handle(&args.file)?;
+	let mut f = get_file_handle(&args.file, args.journal)?;
 
 	handle_input(&mut f)
 }
