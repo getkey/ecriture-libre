@@ -13,44 +13,76 @@ struct Args {
 	file: String,
 }
 
+struct PartialString {
+	content: String,
+	tmp: OsString,
+}
+
+impl PartialString {
+	fn new() -> PartialString {
+		PartialString {
+			content: String::new(),
+			tmp: OsString::with_capacity(4), // UTF-8 code points are up to 4 byte long
+		}
+	}
+	fn push(&mut self, byte: u8) -> Option<char> {
+		self.tmp.push(OsStr::from_bytes(&[byte]));
+
+		if let Some(character) = self.tmp.to_str() {
+			self.content.push_str(character);
+			self.tmp.clear();
+
+			let last_char = self.content.chars().last();
+
+			return last_char;
+		}
+
+		None
+	}
+	fn pop(&mut self) {
+		self.content.pop();
+	}
+	fn len(&self) -> usize {
+		self.content.len()
+	}
+	fn clear(&mut self) {
+		self.content.clear();
+		self.tmp.clear();
+	}
+}
+
 fn process(filename: &str) -> io::Result<()> {
 	println!("{:?}", "éèëêàù".as_bytes());
 
-	let mut buffer = OsString::new();
 	let mut f = OpenOptions::new()
 		.write(true)
 		.create(true)
 		.append(true)
 		.open(filename)?;
 
-	let mut deletable_chars = 0;
+	let mut word = PartialString::new();
 
 	for byte in io::stdin().bytes() {
 		let byte = byte?;
 		match byte {
 			b'\x03' | b'\x04' => break,
 			b' ' | b'.' | b'!' | b'?' | b':' | b',' | b';' => {
-				buffer.push(OsStr::from_bytes(&[byte]));
-				f.write_all(buffer.as_bytes())?;
-				io::stdout().write_all(&[byte])?;
-				buffer.clear();
-				deletable_chars = 0;
+				if let Some(character) = word.push(byte) {
+					print!("{}", character);
+				}
+				f.write_all(word.content.as_bytes())?;
+				word.clear();
 			}
 			b'\x7f' => {
-				if deletable_chars > 0 {
+				if word.len() > 0 {
+					word.pop();
 					print!("\x1B[1D \x1B[1D");
-					// buffer.pop();
-					deletable_chars -= 1;
 				}
 			}
 			_ => {
-				// buffer.push(byte);
-				// let sparkle_heart = str::from_utf8(buffer.as_slice()).unwrap();
-				// print!("{:?} {}", buffer, sparkle_heart);
-				// print!("{}", &buffer as &[char]);
-				// stdout.write_all(&buffer)?;
-				buffer.push(OsStr::from_bytes(&[byte]));
-				deletable_chars += 1;
+				if let Some(character) = word.push(byte) {
+					print!("{}", character);
+				}
 			}
 		}
 		io::stdout().flush()?;
