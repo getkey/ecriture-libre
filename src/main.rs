@@ -1,63 +1,15 @@
 use clap::Parser;
 use nix::sys::termios;
-use std::ffi::OsStr;
-use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io;
 use std::io::{Read, Write};
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::AsRawFd;
+
+mod stream_string;
 
 #[derive(Parser, Debug)]
 struct Args {
 	file: String,
-}
-
-struct PartialString {
-	content: String,
-	tmp: OsString,
-}
-
-impl PartialString {
-	fn new() -> PartialString {
-		PartialString {
-			content: String::new(),
-			tmp: OsString::with_capacity(4), // UTF-8 code points are up to 4 byte long
-		}
-	}
-	fn push(&mut self, byte: u8) -> Result<Option<char>, io::Error> {
-		if self.tmp.len() >= 4 {
-			// if after 4 bytes have been added, tmp hasn't been cleared,
-			// it means these 4 bytes didn't form a valid UTF-8 sequence
-			return Err(io::Error::new(
-				io::ErrorKind::InvalidData,
-				"Invalid UTF-8 sequence.",
-			));
-		}
-
-		self.tmp.push(OsStr::from_bytes(&[byte]));
-
-		if let Some(character) = self.tmp.to_str() {
-			self.content.push_str(character);
-			self.tmp.clear();
-
-			let last_char = self.content.chars().last();
-
-			return Ok(last_char);
-		}
-
-		Ok(None)
-	}
-	fn pop(&mut self) {
-		self.content.pop();
-	}
-	fn len(&self) -> usize {
-		self.content.len()
-	}
-	fn clear(&mut self) {
-		self.content.clear();
-		self.tmp.clear();
-	}
 }
 
 fn process(filename: &str) -> io::Result<()> {
@@ -67,7 +19,7 @@ fn process(filename: &str) -> io::Result<()> {
 		.append(true)
 		.open(filename)?;
 
-	let mut word = PartialString::new();
+	let mut word = stream_string::StreamString::new();
 
 	for byte in io::stdin().bytes() {
 		let byte = byte?;
@@ -84,7 +36,7 @@ fn process(filename: &str) -> io::Result<()> {
 					print!("{}", character);
 
 					if character.is_whitespace() || character.is_ascii_punctuation() {
-						f.write_all(word.content.as_bytes())?;
+						f.write_all(word.as_str().as_bytes())?;
 						word.clear();
 					}
 				}
