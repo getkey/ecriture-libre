@@ -52,8 +52,6 @@ impl PartialString {
 }
 
 fn process(filename: &str) -> io::Result<()> {
-	println!("{:?}", "éèëêàù".as_bytes());
-
 	let mut f = OpenOptions::new()
 		.write(true)
 		.create(true)
@@ -66,13 +64,6 @@ fn process(filename: &str) -> io::Result<()> {
 		let byte = byte?;
 		match byte {
 			b'\x03' | b'\x04' => break,
-			b' ' | b'.' | b'!' | b'?' | b':' | b',' | b';' => {
-				if let Some(character) = word.push(byte) {
-					print!("{}", character);
-				}
-				f.write_all(word.content.as_bytes())?;
-				word.clear();
-			}
 			b'\x7f' => {
 				if word.len() > 0 {
 					word.pop();
@@ -82,6 +73,11 @@ fn process(filename: &str) -> io::Result<()> {
 			_ => {
 				if let Some(character) = word.push(byte) {
 					print!("{}", character);
+
+					if character.is_whitespace() || character.is_ascii_punctuation() {
+						f.write_all(word.content.as_bytes())?;
+						word.clear();
+					}
 				}
 			}
 		}
