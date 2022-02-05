@@ -1,4 +1,3 @@
-use chrono;
 use clap::Parser;
 use nix::sys::termios;
 use std::fs;
